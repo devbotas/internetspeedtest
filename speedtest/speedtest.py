@@ -27,12 +27,31 @@ class speedtest():
 speedtest = speedtest()
 frequency = os.environ.get('FREQUENCY') or 3600
 broker_address = os.environ.get('MQTT_BROKER') or "localhost"
+teltonika_address = os.environ.get('TELTONIKA_BROKER') or "localhost"
+
 
 client = mqtt.Client("1")
 
+
+signal = 0
+teltonikaClient = mqtt.Client("bybis")
+
+def on_message(mqttc, obj, msg):
+    global signal 
+    signal = float(msg.payload.decode())
+    print("signal is: "+str(signal))
+    
+teltonikaClient.on_message = on_message
+
 while True:
     client.connect(broker_address)
+    teltonikaClient.connect(teltonika_address)
+    teltonikaClient.loop_start()
+    teltonikaClient.subscribe("router/1104097390/signal", 1)
+    teltonikaClient.publish("get/1104097390/command", "signal")
     result = speedtest.test()
+  
+
     json_body = [
         {
             "measurement": "download",
@@ -43,7 +62,8 @@ while True:
                 "latency": float(result['ping']['latency']),
                 "jitter": float(result['ping']['jitter']),
                 "interface": str(result['interface']['name']),
-                "server": str(result['server']['host'])
+                "server": str(result['server']['host']),
+                "signal": signal
             }
         }
     ]
@@ -53,6 +73,8 @@ while True:
     if msg_info.is_published() == False:
             msg_info.wait_for_publish()
     client.disconnect()
+    teltonikaClient.loop_stop()
+    teltonikaClient.disconnect()
     time.sleep(int(frequency))
 
 
